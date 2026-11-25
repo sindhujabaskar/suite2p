@@ -40,6 +40,15 @@ files_to_binary = {
         io.movie_to_binary,
     "dcimg":
         io.dcimg_to_binary,
+    "raw":
+        io.raw_to_binary,
+}
+
+# formats whose recording metadata (nplanes, nchannels, fs, ...) must be read
+# before the per-plane dbs and binary files are created: (db, settings) -> (db, settings)
+init_db_from_metadata = {
+    "raw":
+        io.raw_init_db,
 }
 
 def get_save_folder(db):
@@ -396,6 +405,10 @@ def run_s2p(db={}, settings=default_settings(), server={}):
         logger.info(f"FOUND BINARIES AND DBS IN {db_paths}")
         logger.info("removing previous detection and extraction files, if present")
         logger.info(f"will update settings.npy but not db.npy")
+        # keep recorded metadata (e.g. RAW sampling rate) consistent with new settings
+        db0 = np.load(db_paths[0], allow_pickle=True).item()
+        if db0.get("raw_metadata"):
+            settings = io.raw_reconcile_saved_settings(db0, settings)
         files_to_remove = [
             "detect_outputs.npy", "stat.npy", 
             "F.npy", "Fneu.npy", "F_chan2.npy", "Fneu_chan2.npy", 
@@ -410,11 +423,18 @@ def run_s2p(db={}, settings=default_settings(), server={}):
     # if not set up files and copy tiffs/h5py to binary
     else:
         db["input_format"] = db.get("input_format", "tif")
+        if db["input_format"] not in files_to_binary:
+            raise ValueError(f"unknown input_format '{db['input_format']}', "
+                             f"must be one of {list(files_to_binary)}")
         
         # find files
         fs, first_files = io.get_file_list(db)
         db["file_list"] = fs 
         db["first_files"] = first_files
+
+        # read recording metadata that determines the per-plane dbs
+        if db["input_format"] in init_db_from_metadata:
+            db, settings = init_db_from_metadata[db["input_format"]](db, settings)
         
         # copy dbs to list per plane + create folders
         dbs = io.init_dbs(db)

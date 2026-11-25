@@ -136,6 +136,36 @@ Scanbox binary files (*.sbx) work out of the box if you set `db['input_format'] 
 
 When recording in bidirectional mode some columns might have every other line saturated; to trim these during loading set `db['sbx_ndeadcols']`. Set this option to `-1` to let suite2p compute the number of columns automatically, a positive integer to specify the number of columns to trim. Joao Couto (@jcouto) wrote the binary sbx parser.
 
+### Thorlabs RAW files
+
+ThorImageLS streamed recordings (`*.raw` + `Experiment.xml`) can be converted
+directly by setting `db['input_format'] = "raw"` (or selecting "raw" in the GUI).
+This requires `xmltodict` (`pip install xmltodict`, included in `suite2p[io]`).
+
+* Each experiment folder must contain exactly one `*.raw` file and its
+  `Experiment.xml` (or a single `*.xml` file). Folders are found with
+  `data_path`, `subfolders`, `look_one_level_down` and `file_list` as for
+  other formats; several recordings are concatenated in order. If a folder
+  holds more than one `*.raw` file, select one with `db['file_list']`.
+* The number of planes (`ZStage steps` when fast-z is enabled), channels
+  (from the `LSM channel` bitmask, at most 2) and the per-plane sampling rate
+  of the saved frames (`frameRate / averageNum / (planes + flyback frames)`,
+  where `averageNum` applies when `LSM averageMode="1"`) are read from the XML. Leave
+  `db['nplanes']`, `db['nchannels']` and `settings['fs']` at their defaults to
+  use the recorded values; a non-default value that disagrees with the
+  recording is an error. Flyback frames are discarded.
+* Use `db['functional_chan']` to pick the functional channel (1 = first
+  enabled channel).
+* All recordings must share image size, channels, planes, flyback frames and
+  frame rate. RAW files whose size does not match the XML frame count are
+  rejected, except for recordings marked "Stopped", where any incomplete
+  final volume is dropped.
+* If an XML is wrong (e.g. ThorImage never finalized it and its status is
+  still "started"), set `db['raw_xml_overrides']` to replace specific
+  attributes, e.g. `{"Streaming@frames": 30000, "LSM@averageNum": 1}`. Only
+  attributes the reader uses can be overridden; each override is logged and
+  stored in `db['raw_metadata']`. It applies to every RAW file in that run.
+
 ### Nikon nd2 files
 
 Suite2p reads nd2 files using the nd2 package and returns a numpy array representing the data with a minimum of two dimensions (Height, Width). The data can also have additional dimensions for Time, Depth, and Channel. If any dimensions are missing, Suite2p adds them in the order of Time, Depth, Channel, Height, and Width, resulting in a 5-dimensional array. To use Suite2p with nd2 files, simply set `db['input_format'] = "nd2".`
